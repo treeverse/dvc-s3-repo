@@ -3,7 +3,7 @@ import shutil
 
 import git
 
-VERSION = "3.64.2"
+VERSION = "3.65.0"
 URL = "https://github.com/treeverse/dvc"
 
 path = pathlib.Path(__file__).parent.absolute()
