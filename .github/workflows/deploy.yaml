@@ -30,7 +30,7 @@ jobs:
       run: python build.py ${{ matrix.pkg }}
     - name: sanity check
       run: python test.py ${{ matrix.pkg }}
-    - uses: aws-actions/configure-aws-credentials@v5
+    - uses: aws-actions/configure-aws-credentials@v6
       with:
         aws-region: us-east-2
         role-to-assume: arn:aws:iam::977611293394:role/dvc-s3-repo-deploy-${{ matrix.pkg }}
