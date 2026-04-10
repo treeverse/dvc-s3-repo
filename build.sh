@@ -6,6 +6,6 @@ fi
 
 git config --global --add safe.directory "$(pwd)/dvc"
 
-uv pip install './dvc[all]' -r ./build-requirements.txt
+uv pip install --system './dvc[all]' -r ./build-requirements.txt
 python build_bin.py
 python build_pkg.py "${1}"

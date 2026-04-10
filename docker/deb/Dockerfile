@@ -25,7 +25,8 @@ RUN apt-get update && \
         xz-utils \
         zlib1g-dev && \
     # ruby dependencies
-    apt-get install libyaml-dev -y && \
+    apt-get install -y libyaml-dev && \
+
     rm -rf /var/lib/apt/lists/*
 
 RUN curl https://pyenv.run | bash
@@ -33,11 +34,10 @@ RUN curl https://pyenv.run | bash
 ENV PYENV_ROOT="/root/.pyenv"
 ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
 
-RUN PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install ${PYTHON_VERSION}
-RUN pyenv global ${PYTHON_VERSION}
-
 # make sure we're using the correct python version
-RUN python --version | grep ${PYTHON_VERSION}
+RUN PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install ${PYTHON_VERSION} && \
+    pyenv global ${PYTHON_VERSION} && \
+    python --version | grep ${PYTHON_VERSION}
 
 FROM pyenv AS rbenv
 ARG RUBY_VERSION
@@ -45,19 +45,15 @@ ARG RUBY_VERSION
 RUN curl -fsSL https://github.com/rbenv/rbenv-installer/raw/HEAD/bin/rbenv-installer | bash
 ENV RBENV_ROOT="/root/.rbenv"
 ENV PATH="$RBENV_ROOT/shims:$RBENV_ROOT/bin:$PATH"
-RUN rbenv install ${RUBY_VERSION}
-RUN rbenv global ${RUBY_VERSION}
-RUN ruby --version | grep ${RUBY_VERSION}
+RUN rbenv install ${RUBY_VERSION} && \
+    rbenv global ${RUBY_VERSION} && \
+    ruby --version | grep ${RUBY_VERSION}
 
 FROM rbenv
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
-
-RUN gem install fpm
-
-ENV PIP_ROOT_USER_ACTION=ignore
-ENV UV_SYSTEM_PYTHON=1
-
-RUN uv pip install boto awscli && \
 # https://github.com/deb-s3/deb-s3
-    gem install deb-s3
+RUN gem install fpm deb-s3
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /bin/
+
+RUN uv pip install --system boto awscli
