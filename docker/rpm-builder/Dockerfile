@@ -29,11 +29,10 @@ RUN curl https://pyenv.run | bash
 ENV PYENV_ROOT="/root/.pyenv"
 ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
 
-RUN PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install ${PYTHON_VERSION}
-RUN pyenv global ${PYTHON_VERSION}
-
 # make sure we're using the correct python version
-RUN python --version | grep ${PYTHON_VERSION}
+RUN PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install ${PYTHON_VERSION} && \
+    pyenv global ${PYTHON_VERSION} && \
+    python --version | grep ${PYTHON_VERSION}
 
 FROM pyenv as rbenv
 ARG RUBY_VERSION
@@ -42,16 +41,14 @@ RUN yum install -y rbenv
 
 ENV RBENV_ROOT="/root/.rbenv"
 ENV PATH="$RBENV_ROOT/shims:$RBENV_ROOT/bin:$PATH"
-RUN rbenv install ${RUBY_VERSION}
-RUN rbenv global ${RUBY_VERSION}
-RUN ruby --version | grep ${RUBY_VERSION}
+RUN rbenv install ${RUBY_VERSION} && \
+    rbenv global ${RUBY_VERSION} && \
+    ruby --version | grep ${RUBY_VERSION}
 
-FROM rbenv as builder
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
-
-ENV UV_SYSTEM_PYTHON=1
+FROM rbenv
 
 # TODO: check if all of these dependencies are required
-RUN yum install -y wget jq yum-utils gnupg patch gdbm-devel ncurses-devel rpm-build
-RUN gem install fpm
+RUN yum install -y wget jq yum-utils gnupg patch gdbm-devel ncurses-devel rpm-build && \
+    gem install fpm
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.6 /uv /bin/
