@@ -23,13 +23,23 @@ jobs:
       with:
         python-version: "3.14"
     - name: Install deps
-      run: pip install gitpython docker
-    - name: Download
-      run: python download.py
+      run: pip install docker
+
+    - name: Read DVC version
+      run: echo "DVC_VERSION=$(<dvc_version.txt)" >> "$GITHUB_ENV"
+    - name: Checkout specific version of dvc
+      uses: actions/checkout@v6
+      with:
+          repository: treeverse/dvc
+          ref: ${{ env.DVC_VERSION }}
+          path: dvc
+          persist-credentials: false
+          fetch-depth: 0
+
     - name: Build and sign
-      run: python build.py ${{ matrix.pkg }}
+      run: ./main.py build ${{ matrix.pkg }}
     - name: sanity check
-      run: python test.py ${{ matrix.pkg }}
+      run: ./main.py test ${{ matrix.pkg }}
     - uses: aws-actions/configure-aws-credentials@v5
       with:
         aws-region: us-east-2
@@ -41,7 +51,7 @@ jobs:
         GPG_ITERATIVE_PASS: ${{ secrets.GPG_ITERATIVE_PASS }}
         AWS_S3_BUCKET: dvc-packages
         AWS_S3_PREFIX: ${{ matrix.pkg }}
-      run: python upload.py ${{ matrix.pkg }}
+      run: ./main.py upload ${{ matrix.pkg }}
 
   notify:
     if: github.ref == 'refs/heads/main' && failure()

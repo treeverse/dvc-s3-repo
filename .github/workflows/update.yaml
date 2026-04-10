@@ -20,16 +20,9 @@ jobs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: echo "version=$(./latest.sh)" >> $GITHUB_OUTPUT
-    - name: try update
-      id: update
-      shell: bash
       run: |
-        echo latest version ${{ steps.latest.outputs.version }}
-        ./update.sh ${{ steps.latest.outputs.version }}
-        echo "changes=$(git diff | tr '\n' ' ')" >> $GITHUB_OUTPUT
+        gh release list -R treeverse/dvc --json name,isLatest --jq '.[] | select(.isLatest)|.name' > dvc_version.txt
     - name: create PR
-      if: ${{ steps.update.outputs.changes != '' }}
       id: create-pr
       uses: peter-evans/create-pull-request@v8
       with:
