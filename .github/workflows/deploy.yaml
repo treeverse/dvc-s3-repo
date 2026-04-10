@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -35,8 +36,28 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Login to GHCR
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Build Docker image
-      run: docker build -t ${{ matrix.pkg }} ${{ matrix.build_context }}
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ matrix.build_context }}
+        load: true
+        tags: ${{ matrix.pkg }}
+        cache-from: |
+          type=gha,scope=${{ matrix.pkg }}
+          type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.pkg }}
+        cache-to: |
+          type=gha,scope=${{ matrix.pkg }},mode=max
+          type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.pkg }},mode=max
     - name: Write build marker
       run: echo 'PKG = "${{ matrix.pkg }}"' > dvc/dvc/_build.py
     - name: Build
@@ -60,7 +81,17 @@ jobs:
         role-to-assume: arn:aws:iam::977611293394:role/dvc-s3-repo-deploy-${{ matrix.pkg }}
     - name: Build uploader image
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
-      run: docker build -t ${{ matrix.pkg }}-uploader ${{ matrix.upload_context }}
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ matrix.upload_context }}
+        load: true
+        tags: ${{ matrix.pkg }}-uploader
+        cache-from: |
+          type=gha,scope=${{ matrix.pkg }}-uploader
+          type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.pkg }}-uploader
+        cache-to: |
+          type=gha,scope=${{ matrix.pkg }}-uploader,mode=max
+          type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.pkg }}-uploader,mode=max
     - name: Upload
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
       env:
