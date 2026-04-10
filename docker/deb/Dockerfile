@@ -49,16 +49,15 @@ RUN rbenv install ${RUBY_VERSION}
 RUN rbenv global ${RUBY_VERSION}
 RUN ruby --version | grep ${RUBY_VERSION}
 
-FROM rbenv AS builder
+FROM rbenv
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 
 RUN gem install fpm
 
 ENV PIP_ROOT_USER_ACTION=ignore
+ENV UV_SYSTEM_PYTHON=1
 
-RUN pip --no-cache-dir install -U pip wheel
-
-FROM builder AS uploader
-
-RUN pip --no-cache-dir install boto awscli && \
+RUN uv pip install boto awscli && \
 # https://github.com/deb-s3/deb-s3
     gem install deb-s3

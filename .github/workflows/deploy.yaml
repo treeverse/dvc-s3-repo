@@ -10,7 +10,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [deb, rpm]
+        include:
+          - pkg: deb
+            build_context: docker/deb
+            upload_context: docker/deb
+          - pkg: rpm
+            build_context: docker/rpm-builder
+            upload_context: docker/rpm-uploader
     environment: aws
     permissions:
       contents: read
@@ -18,13 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - name: Set up Python 3.14
-      uses: actions/setup-python@v6
-      with:
-        python-version: "3.14"
-    - name: Install deps
-      run: pip install docker
-
     - name: Read DVC version
       run: echo "DVC_VERSION=$(<dvc_version.txt)" >> "$GITHUB_ENV"
     - name: Checkout specific version of dvc
@@ -36,14 +35,32 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-    - name: Build and sign
-      run: ./main.py build ${{ matrix.pkg }}
-    - name: sanity check
-      run: ./main.py test ${{ matrix.pkg }}
-    - uses: aws-actions/configure-aws-credentials@v5
+    - name: Build Docker image
+      run: docker build -t ${{ matrix.pkg }} ${{ matrix.build_context }}
+    - name: Write build marker
+      run: echo 'PKG = "${{ matrix.pkg }}"' > dvc/dvc/_build.py
+    - name: Build
+      run: >
+        docker run --rm
+        -v ${{ github.workspace }}:/dvc-s3-repo
+        -w /dvc-s3-repo
+        ${{ matrix.pkg }}
+        ./build.sh ${{ matrix.pkg }}
+    - name: Test
+      run: >
+        docker run --rm
+        -v ${{ github.workspace }}:/dvc-s3-repo
+        -w /dvc-s3-repo
+        ${{ matrix.pkg }}
+        ./test.sh ${{ matrix.pkg }}
+
+    - uses: aws-actions/configure-aws-credentials@v6
       with:
         aws-region: us-east-2
         role-to-assume: arn:aws:iam::977611293394:role/dvc-s3-repo-deploy-${{ matrix.pkg }}
+    - name: Build uploader image
+      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
+      run: docker build -t ${{ matrix.pkg }}-uploader ${{ matrix.upload_context }}
     - name: Upload
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
       env:
@@ -51,7 +68,20 @@ jobs:
         GPG_ITERATIVE_PASS: ${{ secrets.GPG_ITERATIVE_PASS }}
         AWS_S3_BUCKET: dvc-packages
         AWS_S3_PREFIX: ${{ matrix.pkg }}
-      run: ./main.py upload ${{ matrix.pkg }}
+      run: >
+        docker run --rm
+        -v ${{ github.workspace }}:/dvc-s3-repo
+        -w /dvc-s3-repo/${{ matrix.pkg }}
+        -e AWS_ACCESS_KEY_ID
+        -e AWS_SECRET_ACCESS_KEY
+        -e AWS_SESSION_TOKEN
+        -e AWS_DEFAULT_REGION
+        -e AWS_S3_BUCKET
+        -e AWS_S3_PREFIX
+        -e GPG_ITERATIVE_ASC
+        -e GPG_ITERATIVE_PASS
+        ${{ matrix.pkg }}-uploader
+        ./upload.sh
 
   notify:
     if: github.ref == 'refs/heads/main' && failure()

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -x
 
 if [ -z "$AWS_S3_BUCKET" ]; then
   echo "AWS_S3_BUCKET is not set."
@@ -19,14 +18,14 @@ RPM_REPO=$DIR/dvc.repo
 ASC=$DIR/../iterative.asc
 RPM_S3_DIR=$DIR/rpm-s3
 
-echo "$GPG_ITERATIVE_PASS" > ~/iterative.pass
+printenv GPG_ITERATIVE_PASS > ~/iterative.pass
 cp $DIR/rpmmacros ~/.rpmmacros
 
 aws s3 cp $RPM_REPO s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/
 aws s3 cp $ASC s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/
 aws s3 cp $ASC s3://$AWS_S3_BUCKET/$AWS_S3_PREFIX/gpg/
 
-echo "$GPG_ITERATIVE_ASC" > Iterative.secret.asc
+printenv GPG_ITERATIVE_ASC > Iterative.secret.asc
 gpg2 --no-tty --batch --passphrase-file ~/iterative.pass --pinentry-mode loopback --import Iterative.secret.asc
 
 rm -rf $RPM_S3_DIR
@@ -44,7 +43,7 @@ $RPM_S3_DIR/bin/rpm-s3 -vvv \
   --visibility None \
   --sign \
   --gpg-bin gpg2 \
-  --gpg-options="--no-tty --batch --passphrase $GPG_ITERATIVE_PASS  --pinentry-mode loopback" \
+  --gpg-options="--no-tty --batch --passphrase-file ~/iterative.pass  --pinentry-mode loopback" \
   $PKG
 
 cp $RPM_REPO /etc/yum.repos.d/
