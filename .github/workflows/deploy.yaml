@@ -14,9 +14,11 @@ jobs:
           - pkg: deb
             build_context: docker/deb
             upload_context: docker/deb
+            download_url: https://downloads.dvc.org/deb/pool/stable/d/dv/dvc_{0}_amd64.deb
           - pkg: rpm
             build_context: docker/rpm-builder
             upload_context: docker/rpm-uploader
+            download_url: https://downloads.dvc.org/rpm/dvc-{0}-1.x86_64.rpm
     environment: aws
     permissions:
       contents: read
@@ -75,12 +77,28 @@ jobs:
         ${{ matrix.pkg }}
         ./test.sh ${{ matrix.pkg }}
 
+    - name: Check if version already published
+      id: published
+      env:
+        DOWNLOAD_URL: ${{ format(matrix.download_url, env.DVC_VERSION) }}
+      run: |
+        code=$(curl -sI -o /dev/null -w '%{http_code}' "$DOWNLOAD_URL")
+        if [ "$code" = "200" ]; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        elif [ "$code" = "403" ]; then
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error::Unexpected status $code checking $DOWNLOAD_URL"
+          exit 1
+        fi
+
     - uses: aws-actions/configure-aws-credentials@v6
+      if: ${{ steps.published.outputs.exists != 'true' && github.ref == 'refs/heads/main' }}
       with:
         aws-region: us-east-2
         role-to-assume: arn:aws:iam::977611293394:role/dvc-s3-repo-deploy-${{ matrix.pkg }}
     - name: Build uploader image
-      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
+      if: ${{ steps.published.outputs.exists != 'true' && github.ref == 'refs/heads/main' }}
       uses: docker/build-push-action@v7
       with:
         context: ${{ matrix.upload_context }}
@@ -93,7 +111,7 @@ jobs:
           type=gha,scope=${{ matrix.pkg }}-uploader,mode=max
           type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.pkg }}-uploader,mode=max
     - name: Upload
-      if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'updated dvc to') }}
+      if: ${{ steps.published.outputs.exists != 'true' && github.ref == 'refs/heads/main' }}
       env:
         GPG_ITERATIVE_ASC: ${{ secrets.GPG_ITERATIVE_ASC }}
         GPG_ITERATIVE_PASS: ${{ secrets.GPG_ITERATIVE_PASS }}
